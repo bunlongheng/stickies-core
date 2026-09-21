@@ -1,58 +1,72 @@
 @import "tailwindcss";
 
-@theme {
-  --color-ink: #100e0c;
-  --color-ink-soft: #17140f;
-  --color-rule: #2a251e;
-  --color-paper: #ece5d8;
-  --color-muted: #8a8073;
-  --font-display: var(--font-serif), Georgia, serif;
-  --font-mono: var(--font-mono-face), ui-monospace, monospace;
+/*
+ * Noto is a native macOS app, so the chrome here is macOS: system font, system
+ * greys, a sidebar that follows the system appearance. The values are the ones
+ * the Swift source uses - 12pt titles, 10pt dates, .secondary at 0.12 and 0.15
+ * for the field and badge fills, a 6pt selection pill tinted by folder colour.
+ */
+:root {
+  --sidebar: #f2f2f2;
+  --toolbar: #f6f6f6;
+  --label: #1c1c1e;
+  --secondary: rgba(0, 0, 0, 0.5);
+  --divider: rgba(0, 0, 0, 0.1);
+  --fill-field: rgba(0, 0, 0, 0.06); /* .secondary.opacity(0.12) */
+  --fill-badge: rgba(0, 0, 0, 0.075); /* .secondary.opacity(0.15) */
+  --hover: rgba(0, 0, 0, 0.045);
+  color-scheme: light;
 }
 
-html {
-  color-scheme: dark;
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sidebar: #232323;
+    --toolbar: #2a2a2a;
+    --label: #ffffff;
+    --secondary: rgba(255, 255, 255, 0.55);
+    --divider: rgba(255, 255, 255, 0.12);
+    --fill-field: rgba(255, 255, 255, 0.08);
+    --fill-badge: rgba(255, 255, 255, 0.1);
+    --hover: rgba(255, 255, 255, 0.06);
+    color-scheme: dark;
+  }
+}
+
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background:
-    radial-gradient(120% 80% at 50% -10%, #221d16 0%, transparent 60%),
-    var(--color-ink);
-  color: var(--color-paper);
+  margin: 0;
+  background: var(--sidebar);
+  color: var(--label);
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Paper grain. One layer, fixed, so scrolling does not shimmer. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.035;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+/*
+ * The note body, byte for byte what Noto loads into its WKWebView: white ground,
+ * #1c1c1e ink, 14px/1.55 system, 18px of padding - in dark mode too, because the
+ * note's own HTML is written for a white page.
+ */
+.note-html {
+  background: #ffffff;
+  color: #1c1c1e;
+  padding: 18px;
+  font: 14px/1.55 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 }
 
-/* Rows reveal in sequence on load; --i is set per row. */
-@keyframes rise {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: none; }
+.note-html :where(img) { max-width: 100%; height: auto; }
+.note-html :where(a) { color: #0066cc; }
+.note-html :where(table) { border-collapse: collapse; }
+
+.note-html pre.plain {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  margin: 0;
 }
 
-.rise {
-  opacity: 0;
-  animation: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  animation-delay: calc(var(--i, 0) * 28ms);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .rise { animation: none; opacity: 1; }
-}
-
-/* The note body is user HTML from the full app; give it readable defaults. */
-.prose-note :where(h1, h2, h3) { font-family: var(--font-display); font-weight: 400; margin: 1.4em 0 0.4em; }
-.prose-note :where(p, ul, ol, pre, table) { margin: 0.9em 0; }
-.prose-note :where(a) { color: #d8b06a; text-decoration: underline; }
-.prose-note :where(img) { max-width: 100%; height: auto; border-radius: 6px; }
-.prose-note :where(code) { font-family: var(--font-mono); font-size: 0.9em; background: #ffffff0f; padding: 0.15em 0.4em; border-radius: 4px; }
-.prose-note :where(table) { width: 100%; border-collapse: collapse; }
-.prose-note :where(th, td) { border: 1px solid var(--color-rule); padding: 0.5em 0.7em; text-align: left; }
+/* macOS scrollers: thin, only while scrolling matters. */
+.scroll { scrollbar-width: thin; scrollbar-color: var(--divider) transparent; }
