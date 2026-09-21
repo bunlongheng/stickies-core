@@ -40,11 +40,6 @@ export function daysLeft(trashedAt: string | null) {
   return Math.max(0, Math.floor((gone - Date.now()) / 86_400_000) + 1);
 }
 
-/** Title + folder, lowercased - what the sidebar filter matches against. */
-export function searchKey(note: Note) {
-  return `${note.title} ${note.folder_name ?? ""}`.toLowerCase();
-}
-
 const WORK_LAPTOP = process.env.NEXT_PUBLIC_WORK_MACHINE ?? "WORKSTATION-NAME";
 
 /** Who posted it: the work laptop by hostname, an app by its key, the owner as "me". */

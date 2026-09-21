@@ -8,7 +8,7 @@ import SearchPalette from "@/components/SearchPalette";
 import Sidebar from "@/components/Sidebar";
 import Toast from "@/components/Toast";
 import { dissolve } from "@/lib/dust";
-import { savePng } from "@/lib/export";
+import { canWebp, saveImage } from "@/lib/export";
 import type { Note } from "@/lib/notes";
 import { useBoard } from "@/lib/use-board";
 
@@ -18,13 +18,27 @@ export default function Board({ initial }: { initial: Note[] }) {
   const [zoom, setZoom] = useState(1);
   const [findOpen, setFindOpen] = useState(false);
   const [zoomBadge, setZoomBadge] = useState(false);
+  const [sidebarHidden, setSidebarHidden] = useState(false);
   const badgeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // A new note starts at actual size and with nothing found in it.
   useEffect(() => { setFindOpen(false); }, [board.selected]);
 
+  // Restored from the last session, so a note opens at the size you chose rather
+  // than at whatever its own HTML asks for.
+  useEffect(() => {
+    const saved = Number(localStorage.getItem("pageZoom"));
+    if (saved > 0) setZoom(saved);
+  }, []);
+
   const zoomTo = useCallback((next: number) => {
-    setZoom(Math.min(3, Math.max(0.4, Math.round(next * 10) / 10)));
+    const clamped = Math.min(3, Math.max(0.5, Math.round(next * 10) / 10));
+    setZoom(clamped);
+    try {
+      localStorage.setItem("pageZoom", String(clamped));
+    } catch {
+      // A locked-down browser is no reason to refuse the zoom itself.
+    }
     setZoomBadge(true);
     if (badgeTimer.current) clearTimeout(badgeTimer.current);
     badgeTimer.current = setTimeout(() => setZoomBadge(false), 1100);
@@ -72,7 +86,14 @@ export default function Board({ initial }: { initial: Note[] }) {
         if (key === "f") return hit(e, () => (e.shiftKey ? board.setPaletteOpen(true) : board.selectedNote && setFindOpen(true)));
         if (key === "n") return hit(e, () => board.setComposerOpen(true));
         if (key === "r") return hit(e, () => void board.load());
-        if (key === "s") return hit(e, () => board.selectedNote && void savePng(board.selectedNote.title));
+        if (key === "s")
+          return hit(e, () => {
+            if (!board.selectedNote) return;
+            const format = e.shiftKey && canWebp ? "webp" : "png";
+            void saveImage(board.selectedNote.title, format).then((r) =>
+              board.show(r.ok ? "success" : "failure", r.message),
+            );
+          });
         if (e.shiftKey && key === "]") return hit(e, () => board.stepTab(1));
         if (e.shiftKey && key === "[") return hit(e, () => board.stepTab(-1));
         if (e.shiftKey && key === "w") return hit(e, () => board.selected && board.closeTab(board.selected));
@@ -94,9 +115,11 @@ export default function Board({ initial }: { initial: Note[] }) {
 
   return (
     <div className="relative flex h-dvh overflow-hidden">
-      <Sidebar board={board} />
+      {!sidebarHidden && <Sidebar board={board} />}
       <Detail
         board={board}
+        sidebarHidden={sidebarHidden}
+        toggleSidebar={() => setSidebarHidden((was) => !was)}
         pane={pane}
         setPane={setPane}
         zoom={zoom}

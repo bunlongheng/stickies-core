@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getNote, restoreNote, trashNote } from "@/lib/notes";
+import { sanitize } from "@/lib/sanitize";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -9,7 +10,9 @@ export async function GET(_req: Request, { params }: Ctx) {
   try {
     const note = await getNote(id);
     if (!note) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    return NextResponse.json({ note });
+    // html notes are the owner's own markup, but it is still rendered, not run.
+    const content = note.type === "html" ? sanitize(note.content) : note.content;
+    return NextResponse.json({ note: { ...note, content } });
   } catch (e) {
     console.error("GET /api/notes/[id]", e);
     return NextResponse.json({ error: "Could not read the note" }, { status: 500 });

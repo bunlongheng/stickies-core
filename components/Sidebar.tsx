@@ -6,6 +6,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
 import NoteRow, { ROW_HEIGHT } from "@/components/NoteRow";
+import { guardPaste } from "@/lib/paste-guard";
 import type { Board } from "@/lib/use-board";
 
 /**
@@ -114,8 +115,10 @@ export default function Sidebar({ board }: { board: Board }) {
               e.preventDefault();
               board.stepSelection(e.key === "ArrowDown" ? 1 : -1);
             }}
+            onPaste={guardPaste}
+            placeholder="Filter by title"
             aria-label="Filter notes"
-            className="h-4 w-full bg-transparent text-[12px] outline-none"
+            className="h-4 w-full bg-transparent text-[12px] outline-none placeholder:text-[var(--secondary)]"
           />
           {board.query && (
             <button onClick={() => board.setQuery("")} aria-label="Clear search">

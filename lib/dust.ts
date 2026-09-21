@@ -21,6 +21,29 @@ import { whoosh } from "@/lib/whoosh";
 const DURATION = 1200;
 const EASE = "cubic-bezier(0.45, 0, 0.75, 0.1)";
 
+/**
+ * Colours taken off the note itself, plus its folder tint.
+ *
+ * A single fixed particle colour reads as confetti thrown ON the page rather
+ * than as the page coming apart - the dust has to look like it came out of what
+ * is being erased.
+ */
+function bandColours(pane: HTMLElement, tint: string) {
+  const found = new Set<string>([tint]);
+  const elements = pane.querySelectorAll<HTMLElement>("*");
+  const step = Math.max(1, Math.floor(elements.length / 60));
+  for (let i = 0; i < elements.length && found.size < 8; i += step) {
+    const style = getComputedStyle(elements[i]);
+    for (const colour of [style.color, style.backgroundColor, style.borderTopColor]) {
+      // Skip what cannot be seen: transparent, and the white page under it all.
+      if (!colour || colour.includes("rgba(0, 0, 0, 0)")) continue;
+      if (/^rgba?\(2[45]\d, 2[45]\d, 2[45]\d/.test(colour)) continue;
+      found.add(colour);
+    }
+  }
+  return [...found];
+}
+
 export async function dissolve(pane: HTMLElement, tint: string, work: () => Promise<void>) {
   const stage = pane.parentElement;
   if (!stage || typeof pane.animate !== "function" || prefersReducedMotion()) {
@@ -28,6 +51,7 @@ export async function dissolve(pane: HTMLElement, tint: string, work: () => Prom
     return;
   }
 
+  const colours = bandColours(pane, tint);
   const shot = snapshot(pane);
   stage.appendChild(shot);
   whoosh();
@@ -38,7 +62,7 @@ export async function dissolve(pane: HTMLElement, tint: string, work: () => Prom
     easing: EASE,
     fill: "forwards",
   });
-  const stopDust = spawnDust(shot, tint, started);
+  const stopDust = spawnDust(shot, colours, started);
 
   await work();
 
@@ -69,7 +93,7 @@ function snapshot(pane: HTMLElement) {
 }
 
 /** Dust off the erase front: fastest where the erase is fastest. */
-function spawnDust(stage: HTMLElement, tint: string, started: number) {
+function spawnDust(stage: HTMLElement, colours: string[], started: number) {
   const layer = document.createElement("div");
   layer.className = "dust-layer";
   stage.appendChild(layer);
@@ -80,7 +104,7 @@ function spawnDust(stage: HTMLElement, tint: string, started: number) {
     const front = ease(t) * layer.clientWidth;
     // More dust as the tear accelerates, so the rip is where the mess is.
     const count = 1 + Math.floor(ease(Math.min(1, t + 0.05)) * 6);
-    for (let i = 0; i < count; i++) emit(layer, front, tint);
+    for (let i = 0; i < count; i++) emit(layer, front, colours[(Math.random() * colours.length) | 0]);
     frame = requestAnimationFrame(tick);
   });
 

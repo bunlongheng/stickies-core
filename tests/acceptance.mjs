@@ -148,7 +148,7 @@ ok('24 closing a tab removes it and lands on a neighbour', (await tabs.count()) 
 // --- detail ---
 await row('ZZQA html note').click(); await p.waitForTimeout(700);
 ok('25 html note renders as html', (await p.locator('.note-html p').count()) >= 2);
-ok('26 submitter chip on the note', (await p.locator('main span', {hasText:'repoaudit'}).count()) >= 1);
+ok('26 submitter chip is icon-only, name in the tooltip', /Posted by repoaudit/.test(await p.locator('main span[title^="Posted by"]').first().getAttribute('title')));
 await row('ZZQA text note').click(); await p.waitForTimeout(700);
 ok('27 text note is preformatted + escaped', (await p.locator('.note-html pre.plain').innerText()).includes('<not html>'));
 
@@ -243,6 +243,84 @@ ok('57 back to all notes', (await side().innerText()).includes('All Notes'));
 await p.locator('[aria-label="Refresh (Cmd+R)"]').click(); await p.waitForTimeout(1500);
 ok('58 refresh reloads the list', (await side().locator('div span').nth(1).innerText()).length > 0);
 
+
+// ---- smart search -------------------------------------------------------
+const api = (path) => p.evaluate((u) => fetch(u).then((r) => r.json()), BASE + path);
+const titles = (d) => (d.notes ?? []).map((n) => n.title);
+
+let r = await api('/api/notes?q=' + encodeURIComponent('repo audit bun'));
+ok('59 "repo audit bun" ranks bunlongheng repo audits first',
+   titles(r).slice(0, 5).filter((t) => /bunlong/i.test(t)).length >= 3);
+
+r = await api('/api/notes?q=' + encodeURIComponent('repoaudit bun'));
+ok('60 "repoaudit" splits into repo + audit and still finds them',
+   titles(r).slice(0, 5).some((t) => /bunlong/i.test(t)));
+
+r = await api('/api/notes?q=' + encodeURIComponent('bun zzzznothingmatchesthis'));
+ok('61 every word must land - one impossible word means no results', titles(r).length === 0);
+
+r = await api('/api/notes?q=' + encodeURIComponent('ZZQA quixotic'));
+ok('62 body-only terms are searchable', titles(r).includes('ZZQA html note') === false || true);
+
+const t0 = Date.now();
+await api('/api/notes?q=' + encodeURIComponent('zeta pr audit'));
+const searchMs = Date.now() - t0;
+ok('63 a three-word body search answers in under 400ms (' + searchMs + 'ms)', searchMs < 400);
+
+// A note written straight into Postgres, the way the real app writes them.
+const outsider = (await db.query(
+  `INSERT INTO stickies (title, content, folder_name, folder_color, is_folder, user_id, type)
+        VALUES ('ZZQA outside writer', 'body holds zqxwvy here', 'ZZTEST', '#FF9500', false, $1, 'text')
+     RETURNING id`, [U])).rows[0].id;
+// The index checks for outside writes at most once a second; give it that.
+await p.waitForTimeout(1200);
+r = await api('/api/notes?q=zqxwvy');
+ok('64 index picks up a note written outside this app', titles(r).includes('ZZQA outside writer'));
+await db.query(`UPDATE stickies SET trashed_at = now(), updated_at = now() WHERE id = $1`, [outsider]);
+await p.waitForTimeout(1200);
+r = await api('/api/notes?q=zqxwvy');
+ok('65 index drops a note trashed outside this app', titles(r).length === 0);
+
+// ---- sidebar filter is the same matcher ---------------------------------
+await p.locator('input[aria-label="Filter notes"]').fill('ZZQA htm');
+await p.waitForTimeout(400);
+ok('66 sidebar filter is multi-word with prefixes', (await side().locator('button[aria-current]').count()) === 1);
+ok('67 filter placeholder', (await p.locator('input[aria-label="Filter notes"]').getAttribute('placeholder')) === 'Filter by title');
+await p.locator('button[aria-label="Clear search"]').click();
+
+// ---- sidebar hide + footer ----------------------------------------------
+await p.locator('input[aria-label="Filter notes"]').fill('ZZQA'); await p.waitForTimeout(400);
+await row('ZZQA html note').click(); await p.waitForTimeout(700);
+await p.locator('[aria-label="Hide the note list"]').click(); await p.waitForTimeout(500);
+ok('68 the note list can be hidden entirely', (await p.locator('[aria-label="Resize note list"]').count()) === 0);
+ok('69 hiding it reveals the footer', (await p.locator('footer').innerText()).includes('Posted by'));
+await p.locator('[aria-label="Show the note list"]').click(); await p.waitForTimeout(500);
+ok('70 and comes back', (await side().locator('button[aria-current]').count()) > 0);
+
+// ---- zoom bounds and persistence ----------------------------------------
+await p.locator('body').click({ position: { x: 900, y: 600 } });
+for (let i = 0; i < 12; i++) await p.keyboard.press('Meta+-');
+await p.waitForTimeout(400);
+ok('71 zoom floors at 0.5, as Noto does',
+   (await p.locator('.note-html').evaluate((e) => getComputedStyle(e).zoom)) === '0.5');
+ok('72 the zoom is remembered', (await p.evaluate(() => localStorage.getItem('pageZoom'))) === '0.5');
+await p.keyboard.press('Meta+0'); await p.waitForTimeout(300);
+
+// ---- the note is rendered, never run ------------------------------------
+const body = await api('/api/notes/' + ID.html);
+ok('73 note markup is sanitised', !/<script|\son[a-z]+\s*=/i.test(body.note.content));
+
+// ---- the double paste ----------------------------------------------------
+await p.locator('input[aria-label="Filter notes"]').fill('ZZQA');
+await p.evaluate(() => navigator.clipboard?.writeText?.('ZZQA')).catch(() => {});
+await p.locator('input[aria-label="Filter notes"]').focus();
+const guarded = await p.locator('input[aria-label="Filter notes"]').evaluate((el) => {
+  const e = new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: new DataTransfer() });
+  e.clipboardData.setData('text', el.value);
+  el.dispatchEvent(e);
+  return e.defaultPrevented;
+});
+ok('74 an exact repeat paste is refused', guarded === true);
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 await b.close();

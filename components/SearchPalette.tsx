@@ -2,9 +2,10 @@
 
 import { MagnifyingGlassIcon } from "@heroicons/react/24/solid";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { displayDate, searchKey } from "@/lib/format";
+import { displayDate } from "@/lib/format";
+import { FIELD, phraseBonus, score, terms } from "@/lib/query";
 import { NoteGlyph } from "@/lib/icons";
-import type { Note } from "@/lib/notes";
+import type { Ranked } from "@/lib/notes";
 import type { Board } from "@/lib/use-board";
 
 /**
@@ -18,28 +19,43 @@ export default function SearchPalette({ board }: { board: Board }) {
   const { searchBodies } = board;
   const [query, setQuery] = useState("");
   const [highlighted, setHighlighted] = useState(0);
-  const [bodyHits, setBodyHits] = useState<Note[]>([]);
+  const [bodyHits, setBodyHits] = useState<Ranked[]>([]);
   const [searching, setSearching] = useState(false);
   const list = useRef<HTMLDivElement>(null);
 
-  const q = query.trim().toLowerCase();
-
-  const titleIds = useMemo(
-    () => new Set(q ? board.notes.filter((n) => searchKey(n).includes(q)).map((n) => n.id) : []),
-    [board.notes, q],
-  );
+  const q = query.trim();
 
   /**
-   * Titles first, then the notes that only matched in their text. Capped: the
-   * palette is for finding one note, and a list of 1,400 rows is not a result, it
-   * is the whole database again.
+   * Local title matches paint instantly off the list already in memory; the
+   * server's ranked pass over every body lands a moment later and fills in
+   * behind them. Capped: the palette is for finding one note, and a list of
+   * 1,400 rows is not a result, it is the whole database again.
    */
+  const local = useMemo(() => {
+    const want = terms(q);
+    if (!want.length) return [];
+    const ranked: { note: Ranked; rank: number }[] = [];
+    for (const note of board.notes) {
+      const hit = score(
+        [
+          { tokens: terms(note.title), field: FIELD.title },
+          { tokens: terms(note.folder_name ?? ""), field: FIELD.folder },
+          { tokens: terms(`${note.created_by_key ?? ""} ${note.icon ?? ""}`), field: FIELD.key },
+        ],
+        want,
+      );
+      if (hit !== null) ranked.push({ note, rank: hit + phraseBonus(q, note.title, note.folder_name ?? "") });
+    }
+    return ranked.sort((a, b) => b.rank - a.rank).slice(0, 30).map((r) => r.note);
+  }, [board.notes, q]);
+
+  const titleIds = useMemo(() => new Set(local.map((n) => n.id)), [local]);
+
   const results = useMemo(() => {
     if (!q) return board.notes.slice(0, 30);
-    const titles = board.notes.filter((n) => searchKey(n).includes(q)).slice(0, 30);
-    const seen = new Set(titles.map((n) => n.id));
-    return [...titles, ...bodyHits.filter((n) => !seen.has(n.id)).slice(0, 30)];
-  }, [board.notes, q, bodyHits]);
+    const seen = new Set(titleIds);
+    return [...local, ...bodyHits.filter((n) => !seen.has(n.id)).slice(0, 30)];
+  }, [board.notes, q, local, titleIds, bodyHits]);
 
   useEffect(() => setHighlighted(0), [query]);
 
@@ -72,7 +88,7 @@ export default function SearchPalette({ board }: { board: Board }) {
 
   /** Selecting a note also clears the sidebar filter - landing on a note the list
       is hiding would drop the selection again on the next refilter. */
-  function open(note: Note | undefined) {
+  function open(note: Ranked | undefined) {
     if (!note) return;
     board.setQuery("");
     board.setSelected(note.id);
@@ -141,7 +157,7 @@ export default function SearchPalette({ board }: { board: Board }) {
 
 function Row({
   note, active, inBody, onPick, onHover,
-}: { note: Note; active: boolean; inBody: boolean; onPick: () => void; onHover: () => void }) {
+}: { note: Ranked; active: boolean; inBody: boolean; onPick: () => void; onHover: () => void }) {
   return (
     <button
       onClick={onPick}
@@ -153,9 +169,12 @@ function Row({
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[13px] font-medium">{note.title || "Untitled"}</span>
-        {note.folder_name && (
+        {/* What the note says where it matched, when the title gives no clue. */}
+        {note.snippet ? (
+          <span className="block truncate text-[11px] text-[var(--secondary)]">{note.snippet}</span>
+        ) : note.folder_name ? (
           <span className="block truncate text-[11px] text-[var(--secondary)]">{note.folder_name}</span>
-        )}
+        ) : null}
       </span>
       {inBody && (
         <span className="shrink-0 rounded-full bg-[var(--fill-badge)] px-[5px] py-[2px] text-[9px] font-semibold text-[var(--secondary)]">

@@ -1,4 +1,5 @@
 import { query } from "@/lib/db";
+import { invalidate } from "@/lib/search-index";
 
 /** A list row. The list never carries `content` - bodies are fetched one at a time. */
 export type Note = {
@@ -20,6 +21,9 @@ export type Note = {
 };
 
 export type FullNote = Note & { content: string };
+
+/** A list row carrying why the search returned it. Only set on search results. */
+export type Ranked = Note & { score?: number; matched?: number; snippet?: string | null };
 
 const OWNER = () => process.env.OWNER_USER_ID ?? "";
 
@@ -54,19 +58,15 @@ export function listTrash() {
   );
 }
 
-/**
- * Notes whose BODY matches, which the in-memory filter cannot see - the list the
- * client holds carries titles and folders only. Capped at 50, like the server.
- */
-export function searchNotes(q: string) {
-  return query<Note>(
-    `SELECT ${LIST_COLUMNS} FROM stickies
-      WHERE user_id = $1 AND NOT is_folder AND trashed_at IS NULL
-        AND (title ILIKE $2 OR content ILIKE $2)
-      ORDER BY created_at DESC
-      LIMIT 50`,
-    [OWNER(), `%${q}%`],
+/** The given notes, in the order asked for. */
+export async function notesByIds(ids: string[]) {
+  if (!ids.length) return [];
+  const rows = await query<Note>(
+    `SELECT ${LIST_COLUMNS} FROM stickies WHERE user_id = $1 AND id = ANY($2)`,
+    [OWNER(), ids],
   );
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  return ids.map((id) => byId.get(id)).filter((n): n is Note => !!n);
 }
 
 /** One note WITH its body. */
@@ -98,6 +98,7 @@ export async function trashNote(id: string): Promise<TrashResult> {
     `UPDATE stickies SET folder_name = 'TRASH', trashed_at = now() WHERE id = $1 AND user_id = $2`,
     [id, OWNER()],
   );
+  invalidate();
   return "trashed";
 }
 
@@ -114,6 +115,7 @@ export async function restoreNote(id: string, folder: string) {
       RETURNING id`,
     [id, OWNER(), folder || "CLAUDE"],
   );
+  if (rows.length) invalidate();
   return rows.length > 0;
 }
 
@@ -131,6 +133,7 @@ export async function emptyTrash(): Promise<number | "disabled"> {
       RETURNING id`,
     [OWNER()],
   );
+  invalidate();
   return rows.length;
 }
 
@@ -158,6 +161,7 @@ export async function createNote(title: string, content: string) {
       OWNER(),
     ],
   );
+  invalidate();
   return rows[0];
 }
 

@@ -4,6 +4,7 @@ import { ChevronDownIcon, ChevronUpIcon, XMarkIcon } from "@heroicons/react/24/s
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState } from "react";
 import * as Finder from "@/lib/find";
+import { guardPaste } from "@/lib/paste-guard";
 
 /**
  * Find in note, floating over the page - field, live counter, step buttons. Over
@@ -49,7 +50,8 @@ export default function FindBar({ pane, onClose }: { pane: HTMLElement | null; o
         ref={field}
         value={term}
         onChange={(e) => setTerm(e.target.value)}
-        placeholder="Find"
+        onPaste={guardPaste}
+        placeholder="Find in note"
         aria-label="Find in note"
         className="h-[18px] w-[150px] bg-transparent text-[12px] outline-none"
       />

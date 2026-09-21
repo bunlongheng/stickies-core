@@ -1,8 +1,8 @@
 "use client";
 
 import {
-  ArrowDownTrayIcon, ArrowUturnLeftIcon, MagnifyingGlassMinusIcon, MagnifyingGlassPlusIcon,
-  PencilSquareIcon, TrashIcon,
+  ArrowDownTrayIcon, ArrowUturnLeftIcon, Bars3Icon, MagnifyingGlassMinusIcon,
+  MagnifyingGlassPlusIcon, PencilSquareIcon, PhotoIcon, TrashIcon,
 } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import FindBar from "@/components/FindBar";
@@ -10,11 +10,13 @@ import SubmitterBadge from "@/components/SubmitterBadge";
 import TabBar from "@/components/TabBar";
 import { ago, fullStamp, initial, ink, submitterName } from "@/lib/format";
 import type { Note } from "@/lib/notes";
-import { savePng } from "@/lib/export";
+import { canWebp, saveImage } from "@/lib/export";
 import type { Board } from "@/lib/use-board";
 
 type Props = {
   board: Board;
+  sidebarHidden: boolean;
+  toggleSidebar: () => void;
   pane: HTMLElement | null;
   setPane: (el: HTMLElement | null) => void;
   zoom: number;
@@ -25,7 +27,7 @@ type Props = {
 };
 
 export default function Detail(props: Props) {
-  const { board, setPane, zoom, findOpen, setFindOpen, onTrash } = props;
+  const { board, setPane, zoom, findOpen, setFindOpen, sidebarHidden } = props;
   const fetchBody = board.body;
   const note = board.selectedNote;
   const [content, setContent] = useState<string | null>(null);
@@ -68,17 +70,34 @@ export default function Detail(props: Props) {
             }}
           />
           <SubmitterChip note={note} />
+          {/* With the sidebar open the list row already carries all of this. */}
+          {sidebarHidden && <NoteFooter note={note} />}
         </>
       )}
     </main>
   );
 }
 
-function Toolbar({ board, note, zoom, setZoom, onTrash }: Props & { note: Note | null }) {
+function Toolbar({ board, note, zoom, setZoom, onTrash, sidebarHidden, toggleSidebar }: Props & { note: Note | null }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  async function save(format: "png" | "webp") {
+    if (!note) return;
+    const result = await saveImage(note.title, format);
+    board.show(result.ok ? "success" : "failure", result.message);
+  }
+
   return (
     <header className="flex h-[38px] shrink-0 items-center gap-3 border-b border-[var(--divider)] px-[14px]">
+      <button
+        onClick={toggleSidebar}
+        title={sidebarHidden ? "Show the note list" : "Hide the note list"}
+        aria-label={sidebarHidden ? "Show the note list" : "Hide the note list"}
+        className="shrink-0 text-[var(--secondary)] hover:text-[var(--label)]"
+      >
+        <Bars3Icon className="size-[14px]" />
+      </button>
       <span className="truncate text-[12px] font-semibold">{note?.title || "Stickies Core"}</span>
       {note && (
         <span className="shrink-0 text-[10px] text-[var(--secondary)]">
@@ -104,9 +123,17 @@ function Toolbar({ board, note, zoom, setZoom, onTrash }: Props & { note: Note |
         <Tool onClick={() => board.setComposerOpen(true)} label="New note (Cmd+N)">
           <PencilSquareIcon className="size-[14px]" />
         </Tool>
-        <Tool onClick={() => note && savePng(note.title)} label="Save the whole note as an image (Cmd+S)" disabled={!note}>
+        <Tool onClick={() => save("png")} label="Save the whole note as a PNG (Cmd+S)" disabled={!note}>
           <ArrowDownTrayIcon className="size-[14px]" />
         </Tool>
+        {/* A one-item menu is a worse button: WebP only appears where it encodes -
+            and only after mount, since the server cannot know what this browser
+            can write, and guessing there is a hydration mismatch. */}
+        {mounted && canWebp && (
+          <Tool onClick={() => save("webp")} label="Save the whole note as a WebP (Cmd+Shift+S)" disabled={!note}>
+            <PhotoIcon className="size-[14px]" />
+          </Tool>
+        )}
         {board.viewingTrash ? (
           <Tool onClick={board.restoreSelected} label="Put this note back where it came from" disabled={!note}>
             <ArrowUturnLeftIcon className="size-[14px]" />
@@ -147,15 +174,43 @@ function LaunchTile({ note }: { note: Note }) {
   );
 }
 
-/** Who posted it, over the bottom-left corner of the page. */
+/**
+ * Who posted the open note, bottom left over the page: the device or app icon by
+ * itself, no chrome. Name and time live in the tooltip and the footer.
+ */
 function SubmitterChip({ note }: { note: Note }) {
   return (
-    <span className="pointer-events-none absolute bottom-[10px] left-[10px] flex items-center gap-[6px]
-                     rounded-full border border-[var(--divider)] bg-[var(--toolbar)] px-[8px] py-[4px]
-                     text-[10px] text-[var(--secondary)] shadow-sm">
-      <SubmitterBadge note={note} size={12} />
-      {submitterName(note)}
+    <span
+      className="pointer-events-none absolute bottom-0 left-0 p-[14px] opacity-90"
+      title={`Posted by ${submitterName(note)} \u00b7 ${fullStamp(note.created_at)}`}
+    >
+      <SubmitterBadge note={note} size={36} />
     </span>
+  );
+}
+
+/**
+ * The web app's footer bar: who, when, how long ago, and the folder. Shown only
+ * with the sidebar closed - open, the list row already carries all of it.
+ */
+function NoteFooter({ note }: { note: Note }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return (
+    <footer className="flex h-[28px] shrink-0 items-center gap-[6px] border-t border-[var(--divider)]
+                       bg-[var(--toolbar)] px-3 font-mono text-[11px] text-[var(--secondary)]">
+      <SubmitterBadge note={note} />
+      <span>Posted by {submitterName(note)}</span>
+      <span className="opacity-50">&middot;</span>
+      <span className="tabular-nums">{fullStamp(note.created_at)}</span>
+      {mounted && (
+        <>
+          <span className="opacity-50">&middot;</span>
+          <span>{ago(note.created_at)}</span>
+        </>
+      )}
+      <span className="ml-auto truncate">{note.folder_name}</span>
+    </footer>
   );
 }
 
@@ -183,7 +238,8 @@ function Centered({ children }: { children: React.ReactNode }) {
   );
 }
 
-const round = (z: number) => Math.min(3, Math.max(0.4, Math.round(z * 10) / 10));
+/** Noto clamps page zoom to 0.5-3. */
+const round = (z: number) => Math.min(3, Math.max(0.5, Math.round(z * 10) / 10));
 
 function escape(text: string) {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

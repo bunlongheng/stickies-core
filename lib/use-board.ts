@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { searchKey } from "@/lib/format";
-import type { Note } from "@/lib/notes";
+import { FIELD, phraseBonus, score, terms } from "@/lib/query";
+import type { Note, Ranked } from "@/lib/notes";
 
 export type Toast = { kind: "success" | "failure"; text: string; undo?: boolean; key: number };
 
@@ -26,14 +26,37 @@ export function useBoard(initial: Note[]) {
   const [isLoading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const lastTrashed = useRef<Trashed | null>(null);
+  /** Bounded like Noto's NSCache: oldest out first once the bodies pass 50 MB. */
   const bodies = useRef(new Map<string, string>());
+  const bodyBytes = useRef(0);
   const inflight = useRef(new Map<string, Promise<string>>());
 
   const source = viewingTrash ? trashNotes : notes;
 
+  /**
+   * The same matching the palette does, over the fields the client already holds:
+   * every word must land, a word may match the start of a longer one, and the
+   * closest match sorts first. "repo audit bun" finds bunlongheng's repo audits.
+   */
   const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return q ? source.filter((n) => searchKey(n).includes(q)) : source;
+    const want = terms(query);
+    if (!want.length) return source;
+    const ranked: { note: Note; rank: number }[] = [];
+    for (const note of source) {
+      const hit = score(
+        [
+          { tokens: terms(note.title), field: FIELD.title },
+          { tokens: terms(note.folder_name ?? ""), field: FIELD.folder },
+          { tokens: terms(`${note.created_by_key ?? ""} ${note.icon ?? ""}`), field: FIELD.key },
+        ],
+        want,
+      );
+      if (hit !== null) {
+        ranked.push({ note, rank: hit + phraseBonus(query, note.title, note.folder_name ?? "") });
+      }
+    }
+    // Ties keep the server's order, which is created_at DESC.
+    return ranked.sort((a, b) => b.rank - a.rank).map((r) => r.note);
   }, [source, query]);
 
   /** The strip mirrors the visible list, minus the tabs that were closed. */
@@ -107,6 +130,12 @@ export function useBoard(initial: Note[]) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const content = ((await res.json()).note.content ?? "") as string;
       bodies.current.set(key, content);
+      bodyBytes.current += content.length;
+      while (bodyBytes.current > 50_000_000 && bodies.current.size > 1) {
+        const oldest = bodies.current.keys().next().value as string;
+        bodyBytes.current -= bodies.current.get(oldest)?.length ?? 0;
+        bodies.current.delete(oldest);
+      }
       return content;
     })().finally(() => inflight.current.delete(key));
     inflight.current.set(key, request);
@@ -253,7 +282,7 @@ export function useBoard(initial: Note[]) {
   const searchBodies = useCallback(async (q: string) => {
     try {
       const res = await fetch(`/api/notes?q=${encodeURIComponent(q)}`);
-      return res.ok ? ((await res.json()).notes as Note[]) : [];
+      return res.ok ? ((await res.json()).notes as Ranked[]) : [];
     } catch {
       return [];
     }

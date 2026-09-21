@@ -6,9 +6,9 @@ It reads and writes the **same Postgres `stickies` table** as the full app, so i
 
 | | stickies | stickies-core |
 |---|---|---|
-| Source lines (`app` + `components` + `lib`) | 17,179 | 2,435 |
-| Runtime dependencies | 30 | 6 |
-| Largest file | 7,690 lines | 284 lines |
+| Source lines (`app` + `components` + `lib`) | 17,179 | 3,130 |
+| Runtime dependencies | 30 | 7 |
+| Largest file | 7,690 lines | 355 lines |
 | `useState` in one file | 139 | 13 |
 
 ## Run
@@ -17,8 +17,40 @@ It reads and writes the **same Postgres `stickies` table** as the full app, so i
 cp .env.example .env.local   # DATABASE_URL + OWNER_USER_ID
 npm install
 npm run dev                  # http://localhost:4445
-npm test                     # 59 acceptance checks against the running app
+npm test                     # 75 acceptance checks against the running app
 ```
+
+## Search
+
+Every word has to land somewhere, and a word may match the start of a longer one.
+That is what makes **`repo audit bun`** return Bunlong's repo audits and nothing
+else: `repo` and `audit` match the `repo-audit` folder, `bun` matches the start of
+`bunlongheng`. Titles outrank folders, folders outrank the posting app, and all
+three outrank the body; a run of the query's own words in a title outranks the
+same words scattered. A term nobody knows is cut into two that are known, so
+`repoaudit` finds notes filed under `repo-audit`.
+
+`content ILIKE '%x%'` is a sequential scan over 141 MB of note bodies and measured
+**1.5-2.1s** a query. Postgres would do better with a trigram index on `content`,
+but that is a schema change to the database the real app shares, so the index lives
+in this process instead: one 4.7s build at boot, then
+
+| query | result |
+|---|---|
+| `repo audit bun` | 50 hits, **51ms** |
+| `repoaudit bun` | 50 hits, **50ms** |
+| `session recap stickies` | 31 hits, **109ms** |
+| `hue bridge flash` | 4 hits, **44ms** |
+
+The bodies are stripped of markup in Postgres, which is what makes the build
+affordable: 141 MB of HTML comes back as 10 MB of words, 28,051 terms.
+
+The real notes app writes to this same table all day, so the index would be stale
+the moment it was built. Every search first pulls whatever changed since it last
+looked - one indexed range scan, throttled to once a second, because paying a round
+trip per keystroke turned a 50ms search into 700ms. A note written straight into
+Postgres is searchable by its body about a second later, and one trashed there
+disappears just as fast.
 
 ## Ported from Noto
 
@@ -46,6 +78,13 @@ Every number below came out of Noto's Swift source, not out of a guess.
 | Undo in the toast, restore from TRASH, empty TRASH | same |
 | `Dust.dissolve`: erase left to right on `cubic-bezier(0.45,0,0.75,0.1)` over 1.2s, dust off the front, next note blurs in | same curve, same timings, a CSS mask over a snapshot |
 | `Whoosh`: xorshift noise through two climbing one-pole lowpasses | same synth, in WebAudio |
+| Dust tinted with colours sampled off the note | same, sampled from the rendered DOM |
+| `SubmitterChip`: the icon alone at 36pt, name in the tooltip | same |
+| `NoteFooter`: who, when, how long ago, folder - only with the sidebar closed | same, and the sidebar can close |
+| Page zoom clamped 0.5-3, remembered between sessions | same, in `localStorage` |
+| `PasteGuard`: an exact repeat paste is refused, not corrected | same, on both fields |
+| Export: whole document, 2x, white filled, ~60 MP ceiling, PNG and WebP | same, WebP where the browser can encode |
+| Scripts stripped before the note is rendered | same, plus inline handlers and `javascript:` |
 | `LaunchTile`: folder-coloured tile, initial, 1s breath 0.9/-3deg to 1.05/+2deg | same |
 | Note body: white, `#1c1c1e`, 14px/1.55 system, 18px padding | the same CSS, verbatim |
 | Plain text in `<pre class="plain">` 13px/1.5 mono | same |
@@ -77,7 +116,8 @@ Two lists are windowed, because both mirror all 1,400 notes and neither the side
 
 - **Empty TRASH is off** unless `STICKIES_CORE_ALLOW_PURGE=1`. This points at the real notes database, and a permanent delete is the one thing that cannot be walked back.
 - **No auth.** Noto carries an API key; this talks to Postgres directly and is meant for localhost.
-- Save-as-image writes PNG only. Noto also writes WebP when `cwebp` is installed.
+- Save-as-image writes WebP only where the browser can encode it, which is where Noto needs `cwebp`.
+- Links inside a note open in a new tab. In Noto they hand off to the default browser; here the page itself is the browser, and a note that navigated it would take the app with it.
 
 ## Not here
 
