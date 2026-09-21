@@ -70,3 +70,49 @@ body {
 
 /* macOS scrollers: thin, only while scrolling matters. */
 .scroll { scrollbar-width: thin; scrollbar-color: var(--divider) transparent; }
+
+/* ---- find in note ---- */
+.note-html mark.sn-hit { background: #ffe066; color: #000; border-radius: 2px; padding: 0 1px; }
+.note-html mark.sn-cur { background: #ff9f0a; }
+
+/* ---- the dissolve a trashed note leaves behind ---- */
+@property --erase {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
+}
+
+.dissolving {
+  /* Erased left to right. The gradient is interpolable because --erase is a
+     registered property; animating gradient stops directly is not. */
+  mask-image: linear-gradient(90deg, transparent calc(var(--erase) - 6%), #000 calc(var(--erase) + 2%));
+  mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+  overflow: hidden;
+}
+
+/* What the erase uncovers is the NEXT note, blurred and sharpening into place. */
+.arriving { animation: arrive 0.4s cubic-bezier(0.22, 1, 0.36, 1); }
+
+@keyframes arrive {
+  from { opacity: 0; filter: blur(7px); transform: scale(1.01); }
+  to   { opacity: 1; filter: none; transform: none; }
+}
+
+.dust-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.dust-layer i { position: absolute; border-radius: 50%; will-change: transform, opacity; }
+
+/* ---- the tile a note wears while its body is on the way ---- */
+.launch-tile { animation: breathe 1s ease-in-out infinite alternate; }
+
+@keyframes breathe {
+  from { transform: scale(0.9) rotate(-3deg); opacity: 0.85; }
+  to   { transform: scale(1.05) rotate(2deg); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .launch-tile, .arriving { animation: none; }
+}
+
+/* The dissolving copy is detached, so its scroll offset is a content shift. */
+.dissolving > * { transform: translateY(var(--shift, 0)); }

@@ -1,17 +1,48 @@
 import { NextResponse } from "next/server";
-import { trashNote } from "@/lib/notes";
+import { getNote, restoreNote, trashNote } from "@/lib/notes";
 
-/** Move a note to TRASH. 404 when it is gone, 409 when it is frozen. */
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+type Ctx = { params: Promise<{ id: string }> };
+
+/** One note with its body. */
+export async function GET(_req: Request, { params }: Ctx) {
   const { id } = await params;
   try {
+    const note = await getNote(id);
+    if (!note) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json({ note });
+  } catch (e) {
+    console.error("GET /api/notes/[id]", e);
+    return NextResponse.json({ error: "Could not read the note" }, { status: 500 });
+  }
+}
+
+/**
+ * `{ action: "trash" }` moves a note to TRASH, `{ action: "restore", folder }`
+ * puts it back. 423 for a frozen note, the way the web server answers.
+ */
+export async function PATCH(req: Request, { params }: Ctx) {
+  const { id } = await params;
+  try {
+    const { action, folder } = await req.json();
+
+    if (action === "restore") {
+      const ok = await restoreNote(id, String(folder ?? "CLAUDE"));
+      return ok
+        ? NextResponse.json({ ok: true })
+        : NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
     const result = await trashNote(id);
     if (result === "missing") return NextResponse.json({ error: "Not found" }, { status: 404 });
-    if (result === "frozen")
-      return NextResponse.json({ error: "This note is locked" }, { status: 409 });
+    if (result === "frozen") {
+      return NextResponse.json(
+        { error: "That note is locked. Unlock it in the web app first" },
+        { status: 423 },
+      );
+    }
     return NextResponse.json({ ok: true });
   } catch (e) {
-    console.error("DELETE /api/notes", e);
-    return NextResponse.json({ error: "Could not move the note to TRASH" }, { status: 500 });
+    console.error("PATCH /api/notes/[id]", e);
+    return NextResponse.json({ error: "Could not update the note" }, { status: 500 });
   }
 }
