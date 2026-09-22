@@ -56,9 +56,39 @@ async function cleanup() {
   return gone.rowCount;
 }
 
+/**
+ * The net under the destructive checks.
+ *
+ * Cmd+Delete skips its confirmation on purpose, so a mis-aimed click during a
+ * run would trash a real note silently. Anything that landed in TRASH while the
+ * suite was running, and is not one of its own rows, goes straight back to the
+ * folder its folder_id still points at.
+ */
+async function restoreCollateral(since) {
+  const rows = await db.query(
+    `UPDATE stickies note
+        SET trashed_at = NULL,
+            folder_name = COALESCE((SELECT f.title FROM stickies f WHERE f.id = note.folder_id AND f.is_folder), 'CLAUDE')
+      WHERE note.user_id = $1 AND note.trashed_at >= $2 AND note.title NOT LIKE 'ZZQA %'
+      RETURNING note.title`,
+    [U, since],
+  );
+  return rows.rows.map((r) => r.title);
+}
+
+const startedAt = new Date();
 const ID = await fixtures();
 let pass = 0;
 let fail = 0;
+/** Refuse to run a destructive step unless the fixture is the one selected. */
+const armed = async (want) => {
+  const selected = await title();
+  if (selected === want) return true;
+  fail++;
+  console.log(`FAIL  refused to trash: expected "${want}" to be selected, found "${selected}"`);
+  return false;
+};
+
 const ok = (label, good) => {
   good ? pass++ : fail++;
   console.log((good ? "PASS  " : "FAIL  ") + label);
@@ -206,8 +236,7 @@ ok('44 a toast confirms it', (await p.locator('[role="status"]').innerText()).in
 // --- trash ---
 await p.locator('input[aria-label="Filter notes"]').fill('ZZQA'); await p.waitForTimeout(400);
 await row('ZZQA doomed note').click(); await p.waitForTimeout(700);
-const paneClasses = [];
-p.on('console', () => {});
+if (!(await armed('ZZQA doomed note'))) throw new Error('aborting before a destructive step');
 await p.locator('[aria-label^="Move to TRASH"]').click();
 await p.waitForTimeout(400);
 const mask = await p.locator('.dissolving').first().evaluate(e=>getComputedStyle(e).maskImage).catch(()=>'');
@@ -220,6 +249,7 @@ await p.locator('[role="status"] button', {hasText:'Undo'}).click(); await p.wai
 ok('48 Undo puts it back', (await row('ZZQA doomed note').count()) === 1);
 
 await row('ZZQA doomed two').click(); await p.waitForTimeout(700);
+if (!(await armed('ZZQA doomed two'))) throw new Error('aborting before a destructive step');
 await p.keyboard.press('Meta+Backspace'); await p.waitForTimeout(2200);
 ok('49 Cmd+Delete trashes without asking', (await row('ZZQA doomed two').count()) === 0);
 
@@ -355,5 +385,9 @@ ok('80 the toolbar carries 5 controls at rest, not a row of them (' + chrome.act
 console.log("\n" + pass + " passed, " + fail + " failed");
 await b.close();
 console.log("cleaned up " + (await cleanup()) + " fixture rows");
+const collateral = await restoreCollateral(startedAt);
+console.log(collateral.length
+  ? "PUT BACK " + collateral.length + " note(s) this run should not have touched: " + collateral.join(", ")
+  : "no notes outside the fixtures were touched");
 await db.end();
 process.exit(fail ? 1 : 0);
