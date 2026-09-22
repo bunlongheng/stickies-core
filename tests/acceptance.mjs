@@ -178,9 +178,11 @@ ok('36 Cmd+0 is actual size', (await p.locator('.note-html').evaluate(e=>getComp
 await p.keyboard.press('Meta+Shift+f'); await p.waitForTimeout(400);
 ok('37 Cmd+Shift+F opens the palette', (await p.locator('input[aria-label="Search all notes"]').count()) === 1);
 await p.locator('input[aria-label="Search all notes"]').fill('unique-marker-alpha');
-// 250ms debounce + a body search that measures 1.5-2.1s against the remote DB.
-await p.waitForTimeout(3000);
 const pal = p.locator('[role="dialog"][aria-label="Search all notes"]');
+// 250ms debounce, then a body search - from the index once warm, from the
+// database while it is still building. Waited for, not guessed at.
+await pal.locator('button', { hasText: 'ZZQA html note' }).first()
+  .waitFor({ timeout: 20000 }).catch(() => {});
 console.log('    (palette shows: ' + (await pal.innerText()).replace(/\n/g,' | ') + ')');
 ok('38 palette finds a note by its BODY', (await pal.locator('button', {hasText:'ZZQA html note'}).count()) === 1);
 ok('39 body-only hits wear an "in text" chip', (await pal.locator('span', {hasText:'in text'}).count()) >= 1);
@@ -321,6 +323,34 @@ const guarded = await p.locator('input[aria-label="Filter notes"]').evaluate((el
   return e.defaultPrevented;
 });
 ok('74 an exact repeat paste is refused', guarded === true);
+
+// ---- the window chrome, which is what "looks like Noto" actually means ----
+const chrome = await p.evaluate(() => {
+  const root = document.querySelector('header')?.parentElement;
+  const header = document.querySelector('header');
+  const strip = document.querySelector('[data-active]')?.closest('div')?.parentElement?.parentElement;
+  const active = document.querySelector('[data-active="true"]');
+  const inactive = document.querySelector('[data-active="false"]');
+  const box = (el) => el && { w: Math.round(el.getBoundingClientRect().width), h: Math.round(el.getBoundingClientRect().height), y: Math.round(el.getBoundingClientRect().top) };
+  return {
+    headerIsFirstChild: root?.firstElementChild === header,
+    headerFullWidth: header ? Math.round(header.getBoundingClientRect().width) === window.innerWidth : false,
+    stripBelowHeader: strip && header ? strip.getBoundingClientRect().top >= header.getBoundingClientRect().bottom : false,
+    stripInsideMain: !!document.querySelector('main [data-active]'),
+    stripScroller: strip ? strip.offsetHeight - strip.clientHeight : -1,
+    active: box(active), inactive: box(inactive),
+    actions: header ? [...header.querySelectorAll('button')].length : 0,
+  };
+});
+ok('76 the toolbar is one bar across the whole window, above both panes',
+   chrome.headerIsFirstChild && chrome.headerFullWidth);
+ok('77 the tab strip lives inside the note pane, under the toolbar',
+   chrome.stripInsideMain && chrome.stripBelowHeader);
+ok('78 tab geometry matches Noto (inactive 26x26, active 32 tall)',
+   chrome.inactive?.h === 26 && chrome.inactive?.w === 26 && chrome.active?.h === 32);
+ok('79 the tab strip shows no scroller', chrome.stripScroller === 0);
+ok('80 the toolbar carries 5 controls at rest, not a row of them (' + chrome.actions + ')',
+   chrome.actions <= 5);
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 await b.close();

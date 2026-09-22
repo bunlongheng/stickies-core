@@ -6,7 +6,7 @@ It reads and writes the **same Postgres `stickies` table** as the full app, so i
 
 | | stickies | stickies-core |
 |---|---|---|
-| Source lines (`app` + `components` + `lib`) | 17,179 | 3,130 |
+| Source lines (`app` + `components` + `lib`) | 17,179 | 3,220 |
 | Runtime dependencies | 30 | 7 |
 | Largest file | 7,690 lines | 355 lines |
 | `useState` in one file | 139 | 13 |
@@ -17,7 +17,7 @@ It reads and writes the **same Postgres `stickies` table** as the full app, so i
 cp .env.example .env.local   # DATABASE_URL + OWNER_USER_ID
 npm install
 npm run dev                  # http://localhost:4445
-npm test                     # 75 acceptance checks against the running app
+npm test                     # 80 acceptance checks against the running app
 ```
 
 ## Search
@@ -58,7 +58,10 @@ Every number below came out of Noto's Swift source, not out of a guess.
 
 | Noto | here |
 |---|---|
+| One toolbar across the whole window, tab strip under it inside the note pane | same order, same span |
+| Toolbar at rest: compose, export, trash - zoom lives on Cmd +/-/0 | same; the zoom controls appear only once used |
 | `NavigationSplitView`, sidebar 44-480, ideal 320 | draggable divider, same bounds |
+| Tabs: inactive 26x26, active 32 tall up to 190 wide, 2pt gaps, no scroller | same, measured in the suite |
 | `ListDensity` full / narrow / icons at 260 and 110 | same thresholds, read from the live width |
 | Cycle-width button: full, narrow, icons, back | same, plus double-click on the divider |
 | Row: icon tinted by folder colour, title 12pt, badges, submitter, date 10pt in a 50pt lane | same |

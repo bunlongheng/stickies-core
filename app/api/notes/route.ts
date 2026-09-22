@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { createNote, listNotes, notesByIds } from "@/lib/notes";
-import { search } from "@/lib/search-index";
+import { createNote, listNotes, notesByIds, searchNotesInDb } from "@/lib/notes";
+import { ready, search, warm } from "@/lib/search-index";
 
 /** The list, or - with `?q=` - a ranked search over every title, folder and body. */
 export async function GET(req: Request) {
@@ -10,6 +10,15 @@ export async function GET(req: Request) {
       const notes = await listNotes();
       return NextResponse.json({ notes, total: notes.length });
     }
+    // The index takes about 4s to build. Rather than make the first search of a
+    // session wait for it, answer that one from the database and let the build
+    // finish behind it; everything after is served from memory in ~50ms.
+    if (!ready()) {
+      warm();
+      const notes = await searchNotesInDb(q);
+      return NextResponse.json({ notes, total: notes.length, indexing: true });
+    }
+
     const hits = await search(q);
     const notes = await notesByIds(hits.map((h) => h.id));
     // The rank, why it matched and the body excerpt travel with each row.

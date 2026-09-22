@@ -1,5 +1,4 @@
 import { query } from "@/lib/db";
-import { invalidate } from "@/lib/search-index";
 
 /** A list row. The list never carries `content` - bodies are fetched one at a time. */
 export type Note = {
@@ -58,6 +57,22 @@ export function listTrash() {
   );
 }
 
+/**
+ * The fallback search, used only while the in-memory index is still building.
+ * A sequential scan over every body - slow, but a first search that answers in
+ * 1.5s beats one that waits 4s for the index to finish.
+ */
+export function searchNotesInDb(q: string) {
+  return query<Note>(
+    `SELECT ${LIST_COLUMNS} FROM stickies
+      WHERE user_id = $1 AND NOT is_folder AND trashed_at IS NULL
+        AND (title ILIKE $2 OR folder_name ILIKE $2 OR content ILIKE $2)
+      ORDER BY created_at DESC
+      LIMIT 50`,
+    [OWNER(), `%${q}%`],
+  );
+}
+
 /** The given notes, in the order asked for. */
 export async function notesByIds(ids: string[]) {
   if (!ids.length) return [];
@@ -98,7 +113,6 @@ export async function trashNote(id: string): Promise<TrashResult> {
     `UPDATE stickies SET folder_name = 'TRASH', trashed_at = now() WHERE id = $1 AND user_id = $2`,
     [id, OWNER()],
   );
-  invalidate();
   return "trashed";
 }
 
@@ -115,7 +129,6 @@ export async function restoreNote(id: string, folder: string) {
       RETURNING id`,
     [id, OWNER(), folder || "CLAUDE"],
   );
-  if (rows.length) invalidate();
   return rows.length > 0;
 }
 
@@ -133,7 +146,6 @@ export async function emptyTrash(): Promise<number | "disabled"> {
       RETURNING id`,
     [OWNER()],
   );
-  invalidate();
   return rows.length;
 }
 
@@ -161,7 +173,6 @@ export async function createNote(title: string, content: string) {
       OWNER(),
     ],
   );
-  invalidate();
   return rows[0];
 }
 

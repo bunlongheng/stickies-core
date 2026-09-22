@@ -1,8 +1,7 @@
 "use client";
 
 import {
-  ArrowPathIcon, ArrowUturnLeftIcon, Bars3BottomLeftIcon, ChevronLeftIcon,
-  MagnifyingGlassIcon, TrashIcon, XCircleIcon,
+  ArrowPathIcon, ArrowUturnLeftIcon, ChevronLeftIcon, MagnifyingGlassIcon, TrashIcon, XCircleIcon,
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
 import NoteRow, { ROW_HEIGHT } from "@/components/NoteRow";
@@ -17,17 +16,23 @@ import type { Board } from "@/lib/use-board";
 export type Density = "full" | "narrow" | "icons";
 const densityFor = (w: number): Density => (w < 110 ? "icons" : w < 260 ? "narrow" : "full");
 
-const MIN = 44;
-const MAX = 480;
+export const MIN_WIDTH = 44;
+export const MAX_WIDTH = 480;
+const MIN = MIN_WIDTH;
+const MAX = MAX_WIDTH;
 
-export default function Sidebar({ board }: { board: Board }) {
-  const [width, setWidth] = useState(320);
-  const wide = useRef(320);
+export default function Sidebar({
+  board, width, setWidth,
+}: {
+  board: Board;
+  width: number;
+  setWidth: (fn: (w: number) => number) => void;
+}) {
   const density = densityFor(width);
 
   const drag = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
-    const move = (ev: PointerEvent) => setWidth(Math.min(MAX, Math.max(MIN, ev.clientX)));
+    const move = (ev: PointerEvent) => setWidth(() => Math.min(MAX, Math.max(MIN, ev.clientX)));
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
@@ -35,15 +40,6 @@ export default function Sidebar({ board }: { board: Board }) {
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
   }, []);
-
-  /** One click walks the same three stops a drag can land on by hand, then back. */
-  const cycle = () => {
-    setWidth((w) => {
-      if (w > 260) { wide.current = w; return 150; }
-      if (w > 110) return MIN;
-      return wide.current;
-    });
-  };
 
   const total = board.viewingTrash ? board.trashNotes.length : board.notes.length;
 
@@ -86,9 +82,6 @@ export default function Sidebar({ board }: { board: Board }) {
           </Tool>
           <Tool onClick={board.load} label="Refresh (Cmd+R)">
             <ArrowPathIcon className="size-[13px]" />
-          </Tool>
-          <Tool onClick={cycle} label="Squeeze the list: narrow, then icons, then back">
-            <Bars3BottomLeftIcon className="size-[13px]" />
           </Tool>
         </span>
       </div>
@@ -146,7 +139,6 @@ export default function Sidebar({ board }: { board: Board }) {
       {/* The divider drags freely between the icon-only floor and 480. */}
       <span
         onPointerDown={drag}
-        onDoubleClick={cycle}
         role="separator"
         aria-orientation="vertical"
         aria-label="Resize note list"

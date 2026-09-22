@@ -79,13 +79,21 @@ export async function ensure(): Promise<Index> {
   return building;
 }
 
-/** Drop the index after a write. Cheap: the next search rebuilds it. */
+/**
+ * Rebuild in the background, keeping the current index answering until the new
+ * one is ready. Blocking here meant every create and every trash cost the next
+ * search a 5s stall - and none of them need a rebuild at all, because a write
+ * bumps `updated_at` and `topUp` collects it within the second.
+ */
 export function invalidate() {
-  index = null;
+  if (!index) return;
+  void build().catch((e) => console.error("search index rebuild failed", e));
 }
 
 async function build(): Promise<Index> {
   const started = Date.now();
+  // Only one rebuild at a time; a second request rides along with the first.
+  if (building) return building;
   const rows = await query<Row>(
     `SELECT ${COLUMNS}, updated_at
        FROM stickies
@@ -120,7 +128,7 @@ async function build(): Promise<Index> {
     fields[v] = Uint8Array.from(entry.values());
   });
 
-  index = {
+  const next: Index = {
     docs, vocab, postings, fields,
     builtAt: Date.now(),
     watermark: watermark || new Date(0).toISOString(),
@@ -128,10 +136,11 @@ async function build(): Promise<Index> {
     removed: new Set(),
     checkedAt: Date.now(),
   };
+  index = next;
   console.log(
     `search index: ${docs.length} notes, ${vocab.length} terms, ${Date.now() - started}ms`,
   );
-  return index;
+  return next;
 }
 
 /**
@@ -219,6 +228,8 @@ async function topUp(idx: Index) {
       idx.delta.push(toDoc(row));
     }
   }
+  // Past this the delta is no longer cheap to scan. Rebuild behind the scenes;
+  // the current index keeps answering until the new one lands.
   if (idx.delta.length > DELTA_LIMIT) invalidate();
 }
 
@@ -266,10 +277,8 @@ export type Hit = { id: string; score: number; fields: number; snippet: string |
 export async function search(raw: string, limit = 50): Promise<Hit[]> {
   const asked = terms(raw);
   if (!asked.length) return [];
-  let idx = await ensure();
+  const idx = await ensure();
   await topUp(idx);
-  // topUp may have decided the delta is too big to be cheap any more.
-  if (!index) idx = await ensure();
 
   // Expand what nobody recognises before deciding a query has no answer.
   const want = asked.flatMap((term) =>

@@ -73,7 +73,8 @@ function Strip({ board }: { board: Board }) {
     <div
       ref={track}
       onScroll={(e) => setScroll(e.currentTarget.scrollLeft)}
-      className="scroll h-full flex-1 overflow-x-auto"
+      // showsIndicators: false - a scroller under the tabs reads as a second row.
+      className="h-full flex-1 overflow-x-auto px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       <div className="relative h-full" style={{ width: total }}>
         {board.tabs.map((note, i) => {

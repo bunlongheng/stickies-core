@@ -5,7 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Composer from "@/components/Composer";
 import Detail from "@/components/Detail";
 import SearchPalette from "@/components/SearchPalette";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { MAX_WIDTH, MIN_WIDTH } from "@/components/Sidebar";
+import Toolbar from "@/components/Toolbar";
 import Toast from "@/components/Toast";
 import { dissolve } from "@/lib/dust";
 import { canWebp, saveImage } from "@/lib/export";
@@ -19,6 +20,17 @@ export default function Board({ initial }: { initial: Note[] }) {
   const [findOpen, setFindOpen] = useState(false);
   const [zoomBadge, setZoomBadge] = useState(false);
   const [sidebarHidden, setSidebarHidden] = useState(false);
+  const [width, setWidth] = useState(320);
+  const wide = useRef(320);
+
+  /** One click walks the same three stops a drag can land on by hand, then back. */
+  const cycleWidth = useCallback(() => {
+    setWidth((w) => {
+      if (w > 260) { wide.current = w; return 150; }
+      if (w > 110) return MIN_WIDTH;
+      return Math.min(MAX_WIDTH, wide.current);
+    });
+  }, []);
   const badgeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // A new note starts at actual size and with nothing found in it.
@@ -114,20 +126,28 @@ export default function Board({ initial }: { initial: Note[] }) {
   }, [board, zoom, zoomTo, findOpen, trash]);
 
   return (
-    <div className="relative flex h-dvh overflow-hidden">
-      {!sidebarHidden && <Sidebar board={board} />}
-      <Detail
+    <div className="relative flex h-dvh flex-col overflow-hidden">
+      <Toolbar
         board={board}
         sidebarHidden={sidebarHidden}
         toggleSidebar={() => setSidebarHidden((was) => !was)}
-        pane={pane}
-        setPane={setPane}
+        cycleWidth={cycleWidth}
         zoom={zoom}
         setZoom={zoomTo}
-        findOpen={findOpen}
-        setFindOpen={setFindOpen}
         onTrash={() => void trash(true)}
       />
+      <div className="flex min-h-0 flex-1">
+        {!sidebarHidden && <Sidebar board={board} width={width} setWidth={setWidth} />}
+        <Detail
+          board={board}
+          sidebarHidden={sidebarHidden}
+          pane={pane}
+          setPane={setPane}
+          zoom={zoom}
+          findOpen={findOpen}
+          setFindOpen={setFindOpen}
+        />
+      </div>
 
       {/* Top centre: the find bar owns the top right and the submitter chip the
           bottom left, so this lands on the one edge nothing else uses. */}

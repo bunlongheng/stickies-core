@@ -1,29 +1,21 @@
 "use client";
 
-import {
-  ArrowDownTrayIcon, ArrowUturnLeftIcon, Bars3Icon, MagnifyingGlassMinusIcon,
-  MagnifyingGlassPlusIcon, PencilSquareIcon, PhotoIcon, TrashIcon,
-} from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import FindBar from "@/components/FindBar";
 import SubmitterBadge from "@/components/SubmitterBadge";
 import TabBar from "@/components/TabBar";
 import { ago, fullStamp, initial, ink, submitterName } from "@/lib/format";
 import type { Note } from "@/lib/notes";
-import { canWebp, saveImage } from "@/lib/export";
 import type { Board } from "@/lib/use-board";
 
 type Props = {
   board: Board;
   sidebarHidden: boolean;
-  toggleSidebar: () => void;
   pane: HTMLElement | null;
   setPane: (el: HTMLElement | null) => void;
   zoom: number;
-  setZoom: (z: number) => void;
   findOpen: boolean;
   setFindOpen: (open: boolean) => void;
-  onTrash: () => void;
 };
 
 export default function Detail(props: Props) {
@@ -47,7 +39,6 @@ export default function Detail(props: Props) {
   return (
     <main className="relative flex min-w-0 flex-1 flex-col bg-[var(--toolbar)]">
       <TabBar board={board} />
-      <Toolbar {...props} note={note} />
 
       {!note ? (
         <Centered>Select a note</Centered>
@@ -75,83 +66,6 @@ export default function Detail(props: Props) {
         </>
       )}
     </main>
-  );
-}
-
-function Toolbar({ board, note, zoom, setZoom, onTrash, sidebarHidden, toggleSidebar }: Props & { note: Note | null }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
-  async function save(format: "png" | "webp") {
-    if (!note) return;
-    const result = await saveImage(note.title, format);
-    board.show(result.ok ? "success" : "failure", result.message);
-  }
-
-  return (
-    <header className="flex h-[38px] shrink-0 items-center gap-3 border-b border-[var(--divider)] px-[14px]">
-      <button
-        onClick={toggleSidebar}
-        title={sidebarHidden ? "Show the note list" : "Hide the note list"}
-        aria-label={sidebarHidden ? "Show the note list" : "Hide the note list"}
-        className="shrink-0 text-[var(--secondary)] hover:text-[var(--label)]"
-      >
-        <Bars3Icon className="size-[14px]" />
-      </button>
-      <span className="truncate text-[12px] font-semibold">{note?.title || "Stickies Core"}</span>
-      {note && (
-        <span className="shrink-0 text-[10px] text-[var(--secondary)]">
-          {note.folder_name} &middot; {fullStamp(note.created_at)}
-          {/* Client only: "2 hr. ago" computed on the server is already stale by
-              the time the browser hydrates, which is a hydration mismatch. */}
-          {mounted && <> &middot; {ago(note.created_at)}</>}
-        </span>
-      )}
-      <span className="ml-auto flex shrink-0 items-center gap-[10px] text-[var(--secondary)]">
-        {zoom !== 1 && (
-          <button onClick={() => setZoom(1)} title="Actual Size (Cmd+0)"
-                  className="text-[10px] font-semibold tabular-nums hover:text-[var(--label)]">
-            {Math.round(zoom * 100)}%
-          </button>
-        )}
-        <Tool onClick={() => setZoom(round(zoom - 0.1))} label="Zoom Out (Cmd+-)" disabled={!note}>
-          <MagnifyingGlassMinusIcon className="size-[14px]" />
-        </Tool>
-        <Tool onClick={() => setZoom(round(zoom + 0.1))} label="Zoom In (Cmd++)" disabled={!note}>
-          <MagnifyingGlassPlusIcon className="size-[14px]" />
-        </Tool>
-        <Tool onClick={() => board.setComposerOpen(true)} label="New note (Cmd+N)">
-          <PencilSquareIcon className="size-[14px]" />
-        </Tool>
-        <Tool onClick={() => save("png")} label="Save the whole note as a PNG (Cmd+S)" disabled={!note}>
-          <ArrowDownTrayIcon className="size-[14px]" />
-        </Tool>
-        {/* A one-item menu is a worse button: WebP only appears where it encodes -
-            and only after mount, since the server cannot know what this browser
-            can write, and guessing there is a hydration mismatch. */}
-        {mounted && canWebp && (
-          <Tool onClick={() => save("webp")} label="Save the whole note as a WebP (Cmd+Shift+S)" disabled={!note}>
-            <PhotoIcon className="size-[14px]" />
-          </Tool>
-        )}
-        {board.viewingTrash ? (
-          <Tool onClick={board.restoreSelected} label="Put this note back where it came from" disabled={!note}>
-            <ArrowUturnLeftIcon className="size-[14px]" />
-          </Tool>
-        ) : (
-          <Tool
-            onClick={onTrash}
-            // The server refuses a frozen note, so the button is disabled rather
-            // than firing a request that can only fail.
-            disabled={!note || note.frozen}
-            label={note?.frozen ? "This note is locked - unlock it in the web app" : "Move to TRASH (Cmd+Delete skips the question)"}
-            danger
-          >
-            <TrashIcon className="size-[14px]" />
-          </Tool>
-        )}
-      </span>
-    </header>
   );
 }
 
@@ -237,9 +151,6 @@ function Centered({ children }: { children: React.ReactNode }) {
     <div className="grid flex-1 place-items-center text-[13px] text-[var(--secondary)]">{children}</div>
   );
 }
-
-/** Noto clamps page zoom to 0.5-3. */
-const round = (z: number) => Math.min(3, Math.max(0.5, Math.round(z * 10) / 10));
 
 function escape(text: string) {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
