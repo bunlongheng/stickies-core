@@ -1,4 +1,5 @@
 import { query } from "@/lib/db";
+import { hashLockPassword } from "@/lib/lock-password";
 
 /** A list row. The list never carries `content` - bodies are fetched one at a time. */
 export type Note = {
@@ -92,6 +93,52 @@ export async function getNote(id: string) {
     [id, OWNER()],
   );
   return rows[0] ?? null;
+}
+
+export type WriteResult = "ok" | "frozen" | "missing";
+
+/** The row as it stands, or why it may not be written to. */
+async function writable(id: string): Promise<WriteResult> {
+  const [note] = await query<{ frozen: boolean }>(
+    `SELECT COALESCE(frozen, false) AS frozen FROM stickies
+      WHERE id = $1 AND user_id = $2 AND NOT is_folder AND trashed_at IS NULL`,
+    [id, OWNER()],
+  );
+  if (!note) return "missing";
+  // The full app refuses every edit to a frozen note with a 423, not just the
+  // trash move. Sharing and locking are edits.
+  return note.frozen ? "frozen" : "ok";
+}
+
+/**
+ * Share the note with anyone holding the link, or stop.
+ *
+ * The link itself is served by the full app - this only flips the flag both
+ * apps read, so a note shared here is shareable there and nothing has to be
+ * exposed from this one.
+ */
+export async function setPublic(id: string, isPublic: boolean): Promise<WriteResult> {
+  const can = await writable(id);
+  if (can !== "ok") return can;
+  await query(`UPDATE stickies SET is_public = $3, updated_at = now() WHERE id = $1 AND user_id = $2`,
+    [id, OWNER(), isPublic]);
+  return "ok";
+}
+
+/**
+ * Put a passcode on the note, or take it off. A null passcode clears both the
+ * flag and the hash, so a cleared note leaves nothing behind to verify against.
+ */
+export async function setLock(id: string, passcode: string | null): Promise<WriteResult> {
+  const can = await writable(id);
+  if (can !== "ok") return can;
+  const hash = passcode ? await hashLockPassword(passcode) : null;
+  await query(
+    `UPDATE stickies SET locked = $3, lock_password_hash = $4, updated_at = now()
+      WHERE id = $1 AND user_id = $2`,
+    [id, OWNER(), passcode !== null, hash],
+  );
+  return "ok";
 }
 
 export type TrashResult = "trashed" | "frozen" | "missing";

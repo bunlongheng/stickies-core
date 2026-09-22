@@ -116,3 +116,7 @@ body {
 
 /* The dissolving copy is detached, so its scroll offset is a content shift. */
 .dissolving > * { transform: translateY(var(--shift, 0)); }
+
+/* Switch track when off: solid grey, never a tinted or translucent rail. */
+:root { --switch-off: #d1d1d6; }
+@media (prefers-color-scheme: dark) { :root { --switch-off: #48484a; } }

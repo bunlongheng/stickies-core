@@ -317,6 +317,47 @@ export function useBoard(initial: Note[]) {
     [show],
   );
 
+  /** Patch one note in whichever list is holding it, so a badge flips at once. */
+  const patchNote = useCallback((id: string, fields: Partial<Note>) => {
+    const apply = (list: Note[]) => list.map((n) => (n.id === id ? { ...n, ...fields } : n));
+    setNotes(apply);
+    setTrashNotes(apply);
+  }, []);
+
+  async function writeNote(id: string, body: Record<string, unknown>) {
+    const res = await fetch(`/api/notes/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return res.ok ? null : ((await res.json().catch(() => null))?.error ?? "That did not stick");
+  }
+
+  /**
+   * Share the open note, or stop sharing it. The link is served by the full app;
+   * this only flips the flag both apps read.
+   */
+  const share = useCallback(
+    async (id: string, isPublic: boolean) => {
+      const error = await writeNote(id, { action: "share", public: isPublic });
+      if (error) return show("failure", error);
+      patchNote(id, { is_public: isPublic });
+      show("success", isPublic ? "Anyone with the link can read it" : "Link turned off");
+    },
+    [patchNote, show],
+  );
+
+  /** Put a passcode on the note, or take it off. Null clears it. */
+  const lock = useCallback(
+    async (id: string, passcode: string | null) => {
+      const error = await writeNote(id, { action: "lock", passcode });
+      if (error) return show("failure", error);
+      patchNote(id, { locked: passcode !== null });
+      show("success", passcode ? "Passcode set" : "Passcode removed");
+    },
+    [patchNote, show],
+  );
+
   /** Body matches from the server, which the in-memory filter cannot produce. */
   const searchBodies = useCallback(async (q: string) => {
     try {
@@ -338,13 +379,13 @@ export function useBoard(initial: Note[]) {
       selectedNote, toast, setToast, paletteOpen, setPaletteOpen, composerOpen, setComposerOpen,
       isLoading, error, canUndo: lastTrashed.current !== null,
         load, loadTrash, refresh, toggleTrash, body, stepSelection, stepTab, closeTab, trashSelected,
-      undoTrash, restoreSelected, emptyTrash, createNote, searchBodies, show,
+      undoTrash, restoreSelected, emptyTrash, createNote, searchBodies, show, share, lock,
     }),
     [
       notes, trashNotes, viewingTrash, query, selected, visible, tabs, selectedNote, toast,
       paletteOpen, composerOpen, isLoading, error, load, loadTrash, refresh, toggleTrash, body,
       stepSelection, stepTab, closeTab, trashSelected, undoTrash, restoreSelected, emptyTrash,
-      createNote, searchBodies, show,
+      createNote, searchBodies, show, share, lock,
     ],
   );
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getNote, restoreNote, trashNote } from "@/lib/notes";
+import { getNote, restoreNote, setLock, setPublic, trashNote } from "@/lib/notes";
 import { sanitize } from "@/lib/sanitize";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -21,12 +21,29 @@ export async function GET(_req: Request, { params }: Ctx) {
 
 /**
  * `{ action: "trash" }` moves a note to TRASH, `{ action: "restore", folder }`
- * puts it back. 423 for a frozen note, the way the web server answers.
+ * puts it back, `{ action: "share", public }` flips the public flag, and
+ * `{ action: "lock", passcode }` sets or clears the passcode (null clears).
+ * 423 for a frozen note, the way the web server answers.
  */
 export async function PATCH(req: Request, { params }: Ctx) {
   const { id } = await params;
   try {
-    const { action, folder } = await req.json();
+    const { action, folder, public: isPublic, passcode } = await req.json();
+
+    if (action === "share" || action === "lock") {
+      const result =
+        action === "share"
+          ? await setPublic(id, !!isPublic)
+          : await setLock(id, typeof passcode === "string" && passcode ? passcode : null);
+      if (result === "missing") return NextResponse.json({ error: "Not found" }, { status: 404 });
+      if (result === "frozen") {
+        return NextResponse.json(
+          { error: "That note is locked. Unlock it in the web app first" },
+          { status: 423 },
+        );
+      }
+      return NextResponse.json({ ok: true });
+    }
 
     if (action === "restore") {
       const ok = await restoreNote(id, String(folder ?? "CLAUDE"));

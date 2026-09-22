@@ -2,7 +2,7 @@
 
 # <img src="docs/icon.png" width="36" height="36" align="top" alt=""> Stickies Core
 
-**The reading half of [Stickies](https://github.com/bunlongheng/stickies), in 3,300 lines.**
+**The reading half of [Stickies](https://github.com/bunlongheng/stickies), in 3,600 lines.**
 
 One flat list of every note, ranked search over every word in every body, and a soft delete. No editing, no folders, no sync.
 
@@ -10,7 +10,7 @@ One flat list of every note, ranked search over every word in every body, and a 
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-required-4169E1?logo=postgresql&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-84%20acceptance-34C759)
+![Tests](https://img.shields.io/badge/tests-93%20acceptance-34C759)
 ![Dependencies](https://img.shields.io/badge/runtime%20deps-7-8A8073)
 
 <img src="docs/screenshots/hero.png" alt="Stickies Core: the note list, the tab strip, and a note open beside them" width="900">
@@ -46,9 +46,9 @@ is actually used for, to see what that costs.
 
 | | stickies | stickies-core |
 |---|---|---|
-| Source lines (`app` + `components` + `lib`) | 17,179 | **3,300** |
+| Source lines (`app` + `components` + `lib`) | 17,180 | **3,615** |
 | Runtime dependencies | 30 | **7** |
-| Largest file | 7,690 lines | **355** |
+| Largest file | 7,690 lines | **364** |
 | `useState` in one file | 139 | 13 |
 
 ## Features
@@ -57,6 +57,7 @@ is actually used for, to see what that costs.
 - **Ranked search over every body**, answering in about 50 milliseconds
 - **A tab strip** that mirrors the list, and arrow keys that walk it
 - **Find in note** (`Cmd+F`), page zoom that is remembered, save the whole note as PNG or WebP
+- **Share a note** with anyone holding the link, and **lock it behind a passcode**
 - **TRASH** with restore, undo, and a countdown to the 7-day purge
 - **A composer** for a plain-text note, filed and iconed on the way in
 - A dissolve, with a synthesised whoosh, when a note goes

@@ -5,6 +5,7 @@ import {
   MagnifyingGlassPlusIcon, PencilSquareIcon, TrashIcon,
 } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
+import ShareMenu from "@/components/ShareMenu";
 import { canWebp, saveImage } from "@/lib/export";
 import type { Board } from "@/lib/use-board";
 
@@ -74,6 +75,7 @@ export default function Toolbar({
             </Tool>
           </>
         )}
+        {note && <ShareMenu board={board} note={note} />}
         <Tool onClick={() => board.setComposerOpen(true)} label="New note (Cmd+N)">
           <PencilSquareIcon className="size-[15px]" />
         </Tool>

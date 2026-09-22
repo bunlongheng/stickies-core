@@ -415,8 +415,61 @@ ok('77 the tab strip lives inside the note pane, under the toolbar',
 ok('78 tab geometry matches Noto (inactive 26x26, active 32 tall)',
    chrome.inactive?.h === 26 && chrome.inactive?.w === 26 && chrome.active?.h === 32);
 ok('79 the tab strip shows no scroller', chrome.stripScroller === 0);
-ok('80 the toolbar carries 5 controls at rest, not a row of them (' + chrome.actions + ')',
-   chrome.actions <= 5);
+// Noto's own toolbar is compose, export, trash plus the two sidebar controls.
+// Share is the one thing this app has that Noto does not, so six is the ceiling -
+// the guard exists to stop it creeping back into a row of icons.
+ok('80 the toolbar carries 6 controls at rest, not a row of them (' + chrome.actions + ')',
+   chrome.actions <= 6);
+
+// ---- share and lock ------------------------------------------------------
+// Both flags live in the table the full app reads, so a note shared or locked
+// here has to be shared and locked there. The passcode hash format is the part
+// that must not drift: a different KDF locks the owner out of their own note.
+await p.locator('input[aria-label="Filter notes"]').fill('ZZQA');
+await p.waitForTimeout(500);
+await row('ZZQA html note').click();
+await p.waitForTimeout(900);
+
+const flags = async () => (await db.query(
+  `SELECT is_public, locked, lock_password_hash FROM stickies WHERE id = $1`, [ID.html])).rows[0];
+
+await p.locator('button[aria-label="Share and lock"]').click();
+await p.waitForTimeout(400);
+ok('85 the share sheet opens from the toolbar',
+   (await p.locator('[role="dialog"][aria-label="Share and lock"]').count()) === 1);
+
+await p.locator('[role="switch"]').click();
+await p.waitForTimeout(1800);
+ok('86 sharing writes is_public for the full app to read', (await flags()).is_public === true);
+ok('87 the link it offers points at the full app',
+   (await p.locator('[role="dialog"] span.truncate').first().innerText()).includes('/share?noteId=' + ID.html));
+
+await p.locator('input[aria-label="Passcode"]').fill('hunter2');
+await p.locator('[role="dialog"] button', { hasText: 'Set' }).click();
+await p.waitForTimeout(1800);
+const locked = await flags();
+ok('88 a passcode sets the locked flag', locked.locked === true);
+ok('89 and stores salt$scrypt hex, the format the full app verifies',
+   /^[0-9a-f]{32}\$[0-9a-f]{64}$/.test(locked.lock_password_hash || ''));
+
+await p.locator('[role="dialog"] button', { hasText: 'Remove the passcode' }).click();
+await p.waitForTimeout(1800);
+const cleared = await flags();
+ok('90 removing it clears the flag', cleared.locked === false);
+ok('91 and the hash, leaving nothing to verify against', cleared.lock_password_hash === null);
+
+await p.locator('[role="switch"]').click();
+await p.waitForTimeout(1600);
+ok('92 sharing can be turned back off', (await flags()).is_public === false);
+
+const frozenShare = await p.evaluate(
+  (i) => fetch('/api/notes/' + i, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'share', public: true }),
+  }).then((r) => r.status), ID.frozen);
+ok('93 a frozen note refuses to be shared, like every other edit (' + frozenShare + ')',
+   frozenShare === 423);
+await p.keyboard.press('Escape');
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 await b.close();
