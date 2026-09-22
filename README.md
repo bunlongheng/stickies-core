@@ -17,7 +17,7 @@ It reads and writes the **same Postgres `stickies` table** as the full app, so i
 cp .env.example .env.local   # DATABASE_URL + OWNER_USER_ID
 npm install
 npm run dev                  # http://localhost:4445
-npm test                     # 80 acceptance checks against the running app
+npm test                     # 84 acceptance checks against the running app
 ```
 
 ## Search
@@ -60,6 +60,7 @@ Every number below came out of Noto's Swift source, not out of a guess.
 |---|---|
 | One toolbar across the whole window, tab strip under it inside the note pane | same order, same span |
 | Toolbar at rest: compose, export, trash - zoom lives on Cmd +/-/0 | same; the zoom controls appear only once used |
+| Refresh reloads whichever list is open, TRASH included | same, and it says what it found - a 200ms refresh that reports nothing reads as a dead button |
 | `NavigationSplitView`, sidebar 44-480, ideal 320 | draggable divider, same bounds |
 | Tabs: inactive 26x26, active 32 tall up to 190 wide, 2pt gaps, no scroller | same, measured in the suite |
 | `ListDensity` full / narrow / icons at 260 and 110 | same thresholds, read from the live width |

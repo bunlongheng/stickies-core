@@ -97,7 +97,7 @@ export default function Board({ initial }: { initial: Note[] }) {
         if (key === "0") return hit(e, () => zoomTo(1));
         if (key === "f") return hit(e, () => (e.shiftKey ? board.setPaletteOpen(true) : board.selectedNote && setFindOpen(true)));
         if (key === "n") return hit(e, () => board.setComposerOpen(true));
-        if (key === "r") return hit(e, () => void board.load());
+        if (key === "r") return hit(e, () => void board.refresh());
         if (key === "s")
           return hit(e, () => {
             if (!board.selectedNote) return;

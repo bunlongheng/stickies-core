@@ -80,8 +80,10 @@ export default function Sidebar({
           <Tool onClick={board.toggleTrash} label={board.viewingTrash ? "Back to all notes" : "Show TRASH"}>
             {board.viewingTrash ? <ChevronLeftIcon className="size-[13px]" /> : <TrashIcon className="size-[13px]" />}
           </Tool>
-          <Tool onClick={board.load} label="Refresh (Cmd+R)">
-            <ArrowPathIcon className="size-[13px]" />
+          <Tool onClick={board.refresh} label="Refresh (Cmd+R)">
+            {/* The icon is the progress indicator: a refresh that finishes in
+                200ms flashed a separate spinner too briefly to register. */}
+            <ArrowPathIcon className={`size-[13px] ${board.isLoading ? "animate-spin" : ""}`} />
           </Tool>
         </span>
       </div>
@@ -245,7 +247,7 @@ function Message({ board }: { board: Board }) {
     <div className="flex flex-1 flex-col items-center justify-center gap-[10px] px-[30px] text-center">
       <p className="text-[13px] text-[var(--secondary)]">{text}</p>
       {(board.error || (!board.query && !board.viewingTrash)) && (
-        <button onClick={board.load} className="text-[12px] text-[#0066cc] hover:underline">
+        <button onClick={board.refresh} className="text-[12px] text-[#0066cc] hover:underline">
           Try again
         </button>
       )}

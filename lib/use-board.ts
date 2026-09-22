@@ -26,10 +26,14 @@ export function useBoard(initial: Note[]) {
   const [isLoading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const lastTrashed = useRef<Trashed | null>(null);
+  /** The live lengths, readable from callbacks that must not depend on them. */
+  const counts = useRef({ notes: initial.length, trash: 0 });
   /** Bounded like Noto's NSCache: oldest out first once the bodies pass 50 MB. */
   const bodies = useRef(new Map<string, string>());
   const bodyBytes = useRef(0);
   const inflight = useRef(new Map<string, Promise<string>>());
+
+  counts.current = { notes: notes.length, trash: trashNotes.length };
 
   const source = viewingTrash ? trashNotes : notes;
 
@@ -87,26 +91,61 @@ export function useBoard(initial: Note[]) {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    let arrived = 0;
     try {
       const res = await fetch("/api/notes");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setNotes((await res.json()).notes);
+      const fresh: Note[] = (await res.json()).notes;
+      arrived = fresh.length - counts.current.notes;
+      setNotes(fresh);
     } catch (e) {
       // Keep whatever is already on screen; a failed refresh must not blank the list.
       setError(e instanceof Error ? e.message : "Refresh failed");
     }
     setLoading(false);
+    return arrived;
   }, []);
 
   const loadTrash = useCallback(async () => {
+    setLoading(true);
+    let arrived = 0;
     try {
       const res = await fetch("/api/trash");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setTrashNotes((await res.json()).notes);
+      const fresh: Note[] = (await res.json()).notes;
+      // First visit fills an empty list; that is not "N new".
+      arrived = counts.current.trash === 0 ? 0 : fresh.length - counts.current.trash;
+      setTrashNotes(fresh);
     } catch (e) {
       show("failure", `Could not read TRASH: ${e instanceof Error ? e.message : "failed"}`);
     }
+    setLoading(false);
+    return arrived;
   }, [show]);
+
+  /**
+   * What the refresh button and Cmd+R actually do.
+   *
+   * It has to reload the list being LOOKED AT: in TRASH the main list is not on
+   * screen, so reloading it looked exactly like a button that does nothing. And
+   * a refresh that finishes in 200ms and finds nothing new looks the same way,
+   * so it always says what it found, and always spins long enough to be seen.
+   */
+  const refresh = useCallback(async () => {
+    const started = Date.now();
+    const arrived = viewingTrash ? await loadTrash() : await load();
+    const spent = Date.now() - started;
+    if (spent < 450) await new Promise((r) => setTimeout(r, 450 - spent));
+    const where = viewingTrash ? "TRASH" : "notes";
+    show(
+      "success",
+      arrived > 0
+        ? `${arrived} new ${arrived === 1 ? "note" : "notes"}`
+        : arrived < 0
+          ? `${-arrived} fewer ${arrived === -1 ? "note" : "notes"}`
+          : `Up to date - no change in ${where}`,
+    );
+  }, [viewingTrash, load, loadTrash, show]);
 
   const toggleTrash = useCallback(() => {
     setSelected(null);
@@ -298,12 +337,12 @@ export function useBoard(initial: Note[]) {
       notes, trashNotes, viewingTrash, query, setQuery, selected, setSelected, visible, tabs,
       selectedNote, toast, setToast, paletteOpen, setPaletteOpen, composerOpen, setComposerOpen,
       isLoading, error, canUndo: lastTrashed.current !== null,
-      load, loadTrash, toggleTrash, body, stepSelection, stepTab, closeTab, trashSelected,
+        load, loadTrash, refresh, toggleTrash, body, stepSelection, stepTab, closeTab, trashSelected,
       undoTrash, restoreSelected, emptyTrash, createNote, searchBodies, show,
     }),
     [
       notes, trashNotes, viewingTrash, query, selected, visible, tabs, selectedNote, toast,
-      paletteOpen, composerOpen, isLoading, error, load, loadTrash, toggleTrash, body,
+      paletteOpen, composerOpen, isLoading, error, load, loadTrash, refresh, toggleTrash, body,
       stepSelection, stepTab, closeTab, trashSelected, undoTrash, restoreSelected, emptyTrash,
       createNote, searchBodies, show,
     ],

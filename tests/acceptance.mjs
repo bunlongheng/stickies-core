@@ -271,9 +271,45 @@ ok('56 permanent purge is refused by default (got '+purge+')', purge === 403);
 await p.locator('[aria-label="Back to all notes"]').click(); await p.waitForTimeout(1200);
 ok('57 back to all notes', (await side().innerText()).includes('All Notes'));
 
-// --- refresh ---
-await p.locator('[aria-label="Refresh (Cmd+R)"]').click(); await p.waitForTimeout(1500);
-ok('58 refresh reloads the list', (await side().locator('div span').nth(1).innerText()).length > 0);
+// ---- refresh: it must reload the list you are LOOKING AT --------------
+const toastText = async () =>
+  (await p.locator('[role="status"]').first().innerText().catch(() => '')).replace(/\n/g, ' ');
+const refresh = async () => {
+  await p.locator('[aria-label="Refresh (Cmd+R)"]').click();
+  await p.waitForTimeout(1500);
+};
+
+await refresh();
+ok('58 a refresh that finds nothing says so', /Up to date/.test(await toastText()));
+
+await db.query(
+  `INSERT INTO stickies (title, content, folder_name, folder_color, is_folder, user_id, type)
+        VALUES ('ZZQA refresh probe', 'x', 'ZZTEST', '#FF9500', false, $1, 'text')`, [U]);
+await refresh();
+ok('81 refresh picks up a note added outside the app',
+   (await side().locator('button', { hasText: 'ZZQA refresh probe' }).count()) === 1);
+ok('82 and reports what arrived', /1 new note/.test(await toastText()));
+
+// The bug this replaced: in TRASH it reloaded the main list, so the button
+// looked like it did nothing at all.
+await p.locator('[aria-label="Show TRASH"]').click();
+await p.waitForTimeout(2000);
+await db.query(
+  `INSERT INTO stickies (title, content, folder_name, folder_color, is_folder, user_id, type, trashed_at)
+        VALUES ('ZZQA refresh in trash', 'x', 'TRASH', '#FF9500', false, $1, 'text', now())`, [U]);
+await refresh();
+ok('83 refresh in TRASH reloads TRASH, not the notes list',
+   (await side().locator('button', { hasText: 'ZZQA refresh in trash' }).count()) === 1);
+
+// Cmd+R must not hand the page to the browser.
+await p.locator('body').click({ position: { x: 900, y: 600 } });
+await p.keyboard.press('Meta+r');
+await p.waitForTimeout(1500);
+ok('84 Cmd+R refreshes the list without reloading the page',
+   p.url() === BASE + '/' && /Up to date|new note/.test(await toastText()));
+
+await p.locator('[aria-label="Back to all notes"]').click();
+await p.waitForTimeout(1200);
 
 
 // ---- smart search -------------------------------------------------------
