@@ -40,11 +40,17 @@ export function daysLeft(trashedAt: string | null) {
   return Math.max(0, Math.floor((gone - Date.now()) / 86_400_000) + 1);
 }
 
-const WORK_LAPTOP = process.env.NEXT_PUBLIC_WORK_MACHINE ?? "WORKSTATION-NAME";
+/**
+ * Two machines get their own badge instead of the generic one: the hub that runs
+ * the notes app, and a second workstation. Both are named in the environment -
+ * a machine name is somebody's hardware, not something to ship in source.
+ */
+const HUB = process.env.NEXT_PUBLIC_HUB_MACHINE ?? "";
+const WORKSTATION = process.env.NEXT_PUBLIC_WORKSTATION_MACHINE ?? "";
 
-/** Who posted it: the work laptop by hostname, an app by its key, the owner as "me". */
+/** Who posted it: a named machine by its hostname, an app by its key, the owner as "me". */
 export function submitterName(note: Note) {
-  if (note.created_by_machine === WORK_LAPTOP) return WORK_LAPTOP;
+  if (WORKSTATION && note.created_by_machine === WORKSTATION) return WORKSTATION;
   const key = note.created_by_key ?? "";
   return !key || key === "stickies" ? "me" : key;
 }
@@ -58,13 +64,13 @@ const STICKIES = process.env.NEXT_PUBLIC_STICKIES_URL ?? "http://localhost:4444"
  * back to "automations".
  */
 export function submitterIcons(note: Note): string[] {
-  const hub = note.created_by_machine === "M4";
+  const hub = !!HUB && note.created_by_machine === HUB;
   const fallback = hub ? `${STICKIES}/machines/mac-mini-front.png` : `${STICKIES}/app-icons/stickies.png`;
-  if (note.created_by_machine === WORK_LAPTOP) {
+  if (WORKSTATION && note.created_by_machine === WORKSTATION) {
     return [`${STICKIES}/machines/macbook-m2.png`, fallback];
   }
   const key = (note.created_by_key ?? "").toLowerCase();
-  if (!key || key === "stickies" || key === "m4") {
+  if (!key || key === "stickies" || (!!HUB && key === HUB.toLowerCase())) {
     return [hub ? `${STICKIES}/machines/mac-mini-front.png` : `${STICKIES}/avatar.png`, fallback];
   }
   const head = key.split("-")[0];
